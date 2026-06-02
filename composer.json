@@ -1,0 +1,25 @@
+{
+    "name": "standa/php-v8js",
+    "description": "V8 JavaScript Engine for PHP (PIE-installable wrapper around phpv8/v8js, php8 branch)",
+    "type": "php-ext",
+    "license": "MIT",
+    "keywords": ["v8", "javascript", "php-ext", "pie", "extension"],
+    "require": {
+        "php": "^8.1",
+        "php-64bit": "*"
+    },
+    "php-ext": {
+        "extension-name": "v8js",
+        "support-zts": true,
+        "support-nts": true,
+        "configure-options": [
+            {
+                "name": "with-v8js",
+                "description": "Path to the V8 install prefix (e.g. /usr, /usr/local, /opt/homebrew). Auto-searches /usr/local and /usr if no value is given.",
+                "needs-value": true
+            }
+        ],
+        "download-url-method": ["pre-packaged-binary", "composer-default"],
+        "os-families-exclude": ["windows"]
+    }
+}

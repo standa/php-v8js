@@ -1,0 +1,72 @@
+name: Build and release PIE binaries
+
+on:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: read
+
+jobs:
+  create-draft-release:
+    runs-on: ubuntu-latest
+    permissions:
+      # contents:write is required to create the draft release.
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-tags: 'true'
+          ref: ${{ github.ref }}
+      - name: Create draft release from tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --draft --notes-from-tag
+
+  add-pie-binaries:
+    needs: [create-draft-release]
+    runs-on: ${{ matrix.operating-system }}
+    strategy:
+      # Don't cancel other cells if one fails; we want to see the full matrix.
+      fail-fast: false
+      matrix:
+        operating-system: [ubuntu-24.04, macos-14]
+        php-versions: ['8.1', '8.2', '8.3', '8.4']
+        zts-mode: [nts, ts]
+        exclude:
+          # Homebrew PHP is NTS only; setup-php cannot install a ZTS PHP on macOS.
+          - operating-system: macos-14
+            zts-mode: ts
+    permissions:
+      # contents:write is required to upload to the draft release.
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-versions }}
+        env:
+          phpts: ${{ matrix.zts-mode }}
+
+      - name: Install libv8 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libv8-dev
+          echo "V8_PREFIX=/usr" >> "$GITHUB_ENV"
+
+      - name: Install libv8 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install v8
+          echo "V8_PREFIX=$(brew --prefix v8)" >> "$GITHUB_ENV"
+
+      - name: Build and release
+        id: pie-binary-builder
+        uses: php/pie-ext-binary-builder@0.0.2
+        with:
+          release-tag: ${{ github.ref_name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          configure-flags: "--with-v8js=${{ env.V8_PREFIX }}"

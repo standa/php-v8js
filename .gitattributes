@@ -1,0 +1,15 @@
+# Strip development-only paths from the PIE-downloaded archive.
+/.github               export-ignore
+/.gitattributes        export-ignore
+/.gitignore            export-ignore
+/.dockerignore         export-ignore
+/docs                  export-ignore
+/README.Linux.md       export-ignore
+/README.MacOS.md       export-ignore
+/README.Win32.md       export-ignore
+/package.xml           export-ignore
+
+# Force LF on shell + autoconf inputs
+*.sh   text eol=lf
+*.m4   text eol=lf
+*.w32  text eol=lf
