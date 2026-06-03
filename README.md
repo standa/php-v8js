@@ -8,8 +8,16 @@ Upstream has no `composer.json` and is not on Packagist; this wrapper fills that
 
 ## Install with PIE
 
+> **⚠️ macOS users:** Homebrew's `v8` formula is currently 14.x, which the
+> upstream `php8` branch cannot build against yet (tracked at
+> [phpv8/v8js#546](https://github.com/phpv8/v8js/issues/546)). Until that's
+> resolved, the easiest macOS path is the Docker image at
+> [`marekskopal/php-v8js`](https://hub.docker.com/r/marekskopal/php-v8js).
+> If you want a native install, see *Known limitations → V8 14.x is not
+> supported* below for how to use V8 12.x.
+
 ```bash
-# macOS (Homebrew):
+# macOS (Homebrew) — see warning above; build will fail until v8js supports V8 14.x:
 brew install v8
 pie install standa/php-v8js --with-v8js=$(brew --prefix v8)
 
@@ -84,11 +92,10 @@ rm -rf "$SCRATCH"
 ## Local development
 
 ```bash
-composer validate                              # check composer.json
-git init && git add . && git commit -m "..."  # one-shot scaffold
-pie repository:add path .                      # register this dir as a PIE source
-pie build standa/php-v8js:*@dev --with-v8js=/path/to/v8   # source build, no install
-pie install standa/php-v8js:*@dev --with-v8js=/path/to/v8 # source build + install
+composer validate                                            # check composer.json
+pie repository:add path .                                    # register this dir as a PIE source
+pie build 'standa/php-v8js:*@dev' --with-v8js=/path/to/v8    # source build, no install
+pie install 'standa/php-v8js:*@dev' --with-v8js=/path/to/v8  # source build + install
 ```
 
 ## License
