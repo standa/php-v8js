@@ -54,9 +54,14 @@ jobs:
 
       - name: Install libv8 (Linux)
         if: runner.os == 'Linux'
+        # NOTE: Ubuntu 24.04 (and current Debian) no longer ship `libv8-dev`.
+        # `libnode-dev` provides Node's bundled V8 + headers at /usr/include/node,
+        # which upstream's config.m4 finds when --with-v8js=/usr (it searches for
+        # libnode.so as well as libv8.so). This is the same approach upstream
+        # v8js's own CI uses for its non-Alpine Linux job.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libv8-dev
+          sudo apt-get install -y --no-install-recommends libnode-dev pkg-config
           echo "V8_PREFIX=/usr" >> "$GITHUB_ENV"
 
       - name: Install libv8 (macOS)

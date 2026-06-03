@@ -21,8 +21,8 @@ Upstream has no `composer.json` and is not on Packagist; this wrapper fills that
 brew install v8
 pie install standa/php-v8js --with-v8js=$(brew --prefix v8)
 
-# Debian / Ubuntu:
-sudo apt-get install libv8-dev
+# Debian / Ubuntu (recommended — verified end-to-end in a php:8.4-cli container):
+sudo apt-get install libnode-dev pkg-config
 pie install standa/php-v8js --with-v8js=/usr
 
 # Other: build V8 yourself (see https://v8.dev/docs/build) and pass its install prefix:
@@ -44,12 +44,12 @@ php -r 'echo (new V8Js)->executeString("1+2"), PHP_EOL;'   # should print: 3
 
 ## Prerequisites
 
-V8 itself is **not** distributed here. You must have `libv8` (or Node's bundled V8, on Alpine) installed before `pie install` runs. Recommended sources:
+V8 itself is **not** distributed here. You must have V8 headers + a linkable `libv8` (or, more commonly today, Node's bundled V8) installed before `pie install` runs. Recommended sources:
 
-- Debian/Ubuntu `libv8-dev` (current versions ship V8 ~12.x)
-- Homebrew `v8` (currently V8 14.x — see "Known limitations" below)
-- Alpine: `apk add nodejs-dev` and link against Node's V8 (this is what upstream v8js's own CI does on Alpine)
-- Build from source: see [v8.dev/docs/build](https://v8.dev/docs/build), or use [marekskopal/php-v8js-docker](https://github.com/marekskopal/php-v8js-docker) as a reference build (`scripts/build-v8.sh` there is a working `depot_tools` build pipeline for V8 12.9.203 on Debian)
+- **Debian / Ubuntu `libnode-dev`** — installs V8 headers at `/usr/include/node/v8.h` and the V8 ABI via `libnode.so`. Upstream's `config.m4` searches both `libv8.so` and `libnode.so`, so `--with-v8js=/usr` works. This is also what upstream v8js's own CI uses for its non-Alpine Linux job. Note: Debian's `libv8-dev` was removed years ago — `libnode-dev` is the supported path.
+- **Homebrew `v8`** (currently V8 14.x — see "Known limitations" below)
+- **Alpine** `apk add nodejs-dev` and link against Node's V8 (same idea as Debian's `libnode-dev`; this is what upstream v8js's own CI does on Alpine)
+- **Build from source**: see [v8.dev/docs/build](https://v8.dev/docs/build), or use [marekskopal/php-v8js-docker](https://github.com/marekskopal/php-v8js-docker) as a reference build (`scripts/build-v8.sh` there is a working `depot_tools` build pipeline for V8 12.9.203 on Debian)
 
 ## Known limitations
 
