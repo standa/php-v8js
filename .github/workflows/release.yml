@@ -37,7 +37,11 @@ jobs:
         #                     Graviton, Apple Silicon Docker, Raspberry Pi, etc.)
         # macos-14          = native arm64 macOS runner (Apple Silicon)
         operating-system: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
-        php-versions: ['8.1', '8.2', '8.3', '8.4']
+        # 8.5 is the current PHP stable release as of June 2026; verified
+        # locally in a php:8.5-cli docker container (Debian trixie + libnode-dev).
+        # Upstream v8js's own CI doesn't yet cover 8.5, so this is the
+        # first place 8.5 gets continuous coverage.
+        php-versions: ['8.1', '8.2', '8.3', '8.4', '8.5']
         zts-mode: [nts, ts]
         exclude:
           # Homebrew PHP is NTS only; setup-php cannot install a ZTS PHP on macOS.
