@@ -120,8 +120,7 @@ The "vendored" files are copied byte-for-byte from
     "license": "MIT",
     "keywords": ["v8", "javascript", "php-ext", "pie", "extension"],
     "require": {
-        "php": "^8.1",
-        "php-64bit": "*"
+        "php": "^8.1"
     },
     "php-ext": {
         "extension-name": "v8js",
@@ -149,9 +148,16 @@ Rationale for each non-obvious field:
   matrix (8.1–8.4). PHP 8.0 is EOL (Nov 2023) and not actively tested by
   upstream or by this repo's CI; better to refuse cleanly than to ship a
   half-tested claim.
-- **`require.php-64bit: "*"`** — V8 is 64-bit in practice on every
-  platform that matters; this rejects 32-bit PHP up front instead of
-  surfacing a confusing link error.
+- **`require.php-64bit` is deliberately NOT set.** Empirical finding from
+  local verification on PIE 1.4.5 (2026-06): PIE's resolver does not
+  synthesize the `php-64bit` virtual platform package into its target-PHP
+  composer manifest, so any package declaring `"php-64bit": "*"` is
+  unconditionally rejected ("missing from your platform") even on
+  unambiguously 64-bit hosts. `--ignore-platform-req=php-64bit` is not
+  honored. The original idea (reject 32-bit PHP up front) doesn't work as
+  long as the constraint never resolves. Drop it; users on 32-bit PHP
+  would surface a confusing link error, but 32-bit PHP is essentially
+  extinct in 2026 and we don't pay any practical cost.
 - **`download-url-method`** — try prebuilt binary first, fall back to
   source compile if no matching asset exists.
 - **`os-families-exclude: ["windows"]`** — see Non-goals.
