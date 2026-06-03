@@ -6,7 +6,53 @@ This repo packages the source from phpv8/v8js's `php8` branch (pinned at SHA `8a
 
 Upstream has no `composer.json` and is not on Packagist; this wrapper fills that gap.
 
+## Supported PHP versions
+
+The CI matrix builds and tests against **PHP 8.1, 8.2, 8.3, 8.4, and 8.5** on Linux (x86_64 and arm64, NTS and TS). 8.5 is the current stable as of June 2026; upstream phpv8/v8js's own CI doesn't cover 8.5 yet, so this package is the first place 8.5 gets continuous coverage.
+
+PHP 8.0 is EOL (Nov 2023) and explicitly out of scope. macOS is currently unable to publish prebuilt binaries (V8 14.x incompatibility — see *Known limitations*).
+
 ## Install with PIE
+
+The fast path — assuming `pie` 1.4+ is installed and you're on a published release like `v0.1.0`:
+
+```bash
+# Debian / Ubuntu (verified end-to-end in php:8.4-cli and php:8.5-cli docker images):
+sudo apt-get install libnode-dev pkg-config
+pie install standa/php-v8js --with-v8js=/usr
+```
+
+That single `pie install` does **all** of the following automatically:
+
+1. Resolves `standa/php-v8js` from Packagist (or this repository, once added as a PIE path repo)
+2. Detects your platform tuple — `php<X.Y>-<arch>-<os>-<libc>-<tsmode>` — e.g. `php8.4-arm64-linux-glibc-nts`
+3. Downloads the matching **prebuilt `.so` archive** from the release assets if one exists (asset name: `php_v8js-<ver>_php<X.Y>-<arch>-<os>-<libc>-<tsmode>.zip`). The `composer.json`'s `download-url-method: ["pre-packaged-binary", "composer-default"]` controls this.
+4. **Falls back to a source build** (download git archive → `phpize` → `./configure --with-v8js=...` → `make`) if no matching prebuilt asset is found
+5. Installs the resulting `.so` into the active PHP's extension directory and enables it via an INI file
+
+### What prebuilt binaries ship per release
+
+Each tag (`v0.1.0`, `v0.1.1`, …) produces these binaries via `.github/workflows/release.yml`:
+
+| Platform | PHP versions | NTS | TS |
+|---|---|---|---|
+| `linux-glibc-x86_64` | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ |
+| `linux-glibc-arm64`  | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ |
+| `darwin-arm64` (macOS Apple Silicon) | — | ❌ | ❌ (until [v8js#546](https://github.com/phpv8/v8js/issues/546) lands) |
+| Windows | — | ❌ | ❌ (out of scope — would need [php/php-windows-builder](https://github.com/php/php-windows-builder)) |
+
+20 Linux binaries per release. Users on macOS or any platform without a prebuilt get a source build automatically — no extra commands needed.
+
+### Other install paths
+
+```bash
+# macOS (Homebrew) — see warning below; build will fail until v8js supports V8 14.x:
+brew install v8
+pie install standa/php-v8js --with-v8js=$(brew --prefix v8)
+
+# Custom V8 build (when you've built V8 from source):
+pie install standa/php-v8js --with-v8js=/opt/v8
+```
 
 > **⚠️ macOS users:** Homebrew's `v8` formula is currently 14.x, which the
 > upstream `php8` branch cannot build against yet (tracked at
@@ -16,25 +62,24 @@ Upstream has no `composer.json` and is not on Packagist; this wrapper fills that
 > If you want a native install, see *Known limitations → V8 14.x is not
 > supported* below for how to use V8 12.x.
 
-```bash
-# macOS (Homebrew) — see warning above; build will fail until v8js supports V8 14.x:
-brew install v8
-pie install standa/php-v8js --with-v8js=$(brew --prefix v8)
-
-# Debian / Ubuntu (recommended — verified end-to-end in a php:8.4-cli container):
-sudo apt-get install libnode-dev pkg-config
-pie install standa/php-v8js --with-v8js=/usr
-
-# Other: build V8 yourself (see https://v8.dev/docs/build) and pass its install prefix:
-pie install standa/php-v8js --with-v8js=/opt/v8
-```
-
-If `pie` is not yet on your system, follow [its install guide](https://github.com/php/pie#installing-pie). Verify after install:
+### Verify the install
 
 ```bash
 php -m | grep v8js          # should print: v8js
 php -r 'echo (new V8Js)->executeString("1+2"), PHP_EOL;'   # should print: 3
 ```
+
+### If `pie` isn't installed yet
+
+Follow [PIE's install guide](https://github.com/php/pie#installing-pie). On macOS: `brew install pie`. On Debian/Ubuntu the quickest path is:
+
+```bash
+curl -sSL https://github.com/php/pie/releases/latest/download/pie.phar -o /usr/local/bin/pie
+chmod +x /usr/local/bin/pie
+pie --version    # should print: 1.4.x or newer
+```
+
+PIE 1.4+ is required (1.3.x doesn't recognize the `php-64bit` platform package, among other resolver fixes).
 
 ## Configure options
 
