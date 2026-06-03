@@ -32,11 +32,16 @@ jobs:
       # Don't cancel other cells if one fails; we want to see the full matrix.
       fail-fast: false
       matrix:
-        operating-system: [ubuntu-24.04, macos-14]
+        # ubuntu-24.04      = native x86_64 Linux runner
+        # ubuntu-24.04-arm  = native arm64 Linux runner (no QEMU; matches AWS
+        #                     Graviton, Apple Silicon Docker, Raspberry Pi, etc.)
+        # macos-14          = native arm64 macOS runner (Apple Silicon)
+        operating-system: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
         php-versions: ['8.1', '8.2', '8.3', '8.4']
         zts-mode: [nts, ts]
         exclude:
           # Homebrew PHP is NTS only; setup-php cannot install a ZTS PHP on macOS.
+          # This exclude is macOS-specific; both Ubuntu runners build TS and NTS.
           - operating-system: macos-14
             zts-mode: ts
     permissions:
