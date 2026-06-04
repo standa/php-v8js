@@ -24,7 +24,7 @@ sudo apt-get install -y libnode-dev unzip
 pie install standa/php-v8js
 
 # Alpine / php:X.Y-cli-alpine / php:X.Y-fpm-alpine:
-apk add --no-cache nodejs unzip
+apk add --no-cache nodejs-dev unzip
 pie install standa/php-v8js
 ```
 
