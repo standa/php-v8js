@@ -14,7 +14,7 @@ jobs:
       # contents:write is required to create the draft release.
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-tags: 'true'
           ref: ${{ github.ref }}
@@ -43,6 +43,12 @@ jobs:
       image: php:${{ matrix.php-version }}-${{ matrix.zts-mode == 'ts' && 'zts' || 'cli' }}${{ matrix.distro == 'alpine' && '-alpine' || '' }}
     strategy:
       fail-fast: false
+      # Cap concurrency to avoid concurrent release-asset upload contention.
+      # When 40 cells all call `gh release upload` against the same draft
+      # release within a few seconds of each other, GitHub returns 502s /
+      # transient errors on a non-trivial fraction. pie-ext-binary-builder
+      # doesn't retry. Throttling to 8 in flight keeps uploads spread out.
+      max-parallel: 8
       matrix:
         # ubuntu-24.04     = x86_64 native runner
         # ubuntu-24.04-arm = arm64 native runner (no QEMU)
@@ -59,7 +65,7 @@ jobs:
       # contents:write is required to upload to the draft release.
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       # The slim php:X.Y-* images don't include build tooling or libnode-dev.
       # pie-ext-binary-builder needs jq + zip + a C++ toolchain (it shells out
@@ -99,7 +105,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
