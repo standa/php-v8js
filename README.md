@@ -14,16 +14,21 @@ PHP 8.0 is EOL (Nov 2023) and explicitly out of scope. macOS is currently unable
 
 ## Install with PIE
 
-### Fast path — prebuilt binary (Debian trixie + derivatives)
+### Fast path — prebuilt binary
 
-If you're on a `php:X.Y-cli`/`-fpm`/`-apache` image, Debian trixie, Ubuntu 25.04+, or any host with `libnode-dev` (Node ≥ 20, `libnode.so.115`):
+The asset that gets downloaded depends on your platform tuple — PIE picks the right one automatically. **Do not pass `--with-v8js`** on this path: PIE refuses prebuilts when configure options are passed (it can't know whether the prebuilt was built with the flag you wanted) and falls back to a source build instead.
 
 ```bash
+# Debian trixie / php:X.Y-cli/fpm/apache / Ubuntu 25.04+:
 sudo apt-get install -y libnode-dev unzip
+pie install standa/php-v8js
+
+# Alpine / php:X.Y-cli-alpine / php:X.Y-fpm-alpine:
+apk add --no-cache nodejs unzip
 pie install standa/php-v8js
 ```
 
-**Do not pass `--with-v8js`** on this path. PIE refuses prebuilt binaries when any configure option is set (it can't know whether the prebuilt was built with the flag you wanted), and falls back to a source build instead. The prebuilt was already linked against `/usr/lib/.../libnode.so` — no `--with-v8js` needed.
+The prebuilt was already linked against `/usr/lib/libnode.so.*` from the matching distro — no `--with-v8js` needed.
 
 ### What `pie install` does (no flags, the prebuilt path)
 
@@ -40,20 +45,26 @@ Each tag produces these binaries via `.github/workflows/release.yml`:
 
 | Platform | PHP versions | NTS | TS | libnode SOVERSION |
 |---|---|---|---|---|
-| `linux-glibc-x86_64` (Debian trixie based) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
-| `linux-glibc-arm64`  (Debian trixie based) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
+| `linux-glibc-x86_64` (Debian trixie / `php:X.Y-cli`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
+| `linux-glibc-arm64`  (Debian trixie / `php:X.Y-cli`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
+| `linux-musl-x86_64`  (Alpine / `php:X.Y-cli-alpine`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.137` |
+| `linux-musl-arm64`   (Alpine / `php:X.Y-cli-alpine`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.137` |
 | `darwin-arm64` (macOS Apple Silicon) | — | ❌ | ❌ (until [v8js#546](https://github.com/phpv8/v8js/issues/546) lands) | — |
 | Windows | — | ❌ | ❌ (out of scope — would need [php/php-windows-builder](https://github.com/php/php-windows-builder)) | — |
 
-**20 Linux binaries per release**, all built inside the matching `php:X.Y-cli`/`-zts` container (Debian trixie) so the `.so` links against `libnode.so.115`. Users on hosts with a different SOVERSION (Ubuntu 22.04/24.04 = `.109`, Alpine = different again) won't be able to dynamically load these binaries — see the *source-build escape hatch* below.
+**40 Linux binaries per release**, each built inside the matching `php:X.Y-{cli,zts}{,-alpine}` container so the `.so` links against the libnode SOVERSION that actually ships with that base image. Users on hosts with a different SOVERSION (Ubuntu 22.04/24.04 = `.109`, custom Node build) won't be able to dynamically load these binaries — see the *source-build escape hatch* below.
 
 ### Source-build escape hatch (any libv8/libnode version)
 
-If you're on a host without `libnode.so.115` (Ubuntu 22.04/24.04, Alpine, custom V8 build) — or PIE installs a prebuilt that fails to load at startup with `cannot open shared object file` — pass `--with-v8js=PATH` to force a source build against your local V8/Node headers:
+If you're on a host without a matching libnode SOVERSION (Ubuntu 22.04/24.04 = `.109`, custom Node build) — or PIE installs a prebuilt that fails to load at startup with `cannot open shared object file` — pass `--with-v8js=PATH` to force a source build against your local V8/Node headers:
 
 ```bash
 # Debian/Ubuntu (any version where libnode-dev is available):
 sudo apt-get install -y libnode-dev pkg-config build-essential autoconf libtool
+pie install standa/php-v8js --with-v8js=/usr
+
+# Alpine (any version where nodejs-dev is available):
+apk add --no-cache build-base autoconf libtool m4 pkgconfig nodejs-dev
 pie install standa/php-v8js --with-v8js=/usr
 
 # macOS (Homebrew — see warning below; build will fail until v8js supports V8 14.x):

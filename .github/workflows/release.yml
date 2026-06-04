@@ -28,28 +28,33 @@ jobs:
   add-pie-binaries-linux:
     needs: [create-draft-release]
     runs-on: ${{ matrix.runner }}
-    # Build inside the official PHP Docker image (Debian trixie base) so the
-    # produced .so links against libnode.so.115 — the SOVERSION that ships
-    # with php:X.Y-cli/fpm/apache, Debian trixie, and Ubuntu noble+ derivatives.
-    # If we built on the ubuntu-24.04 runner directly the .so would link against
-    # libnode.so.109 (Node 18 from Ubuntu 24.04), which is missing on the more
-    # popular php:X.Y-cli userspace and fails at php startup with:
-    #   "libnode.so.109: cannot open shared object file: No such file or directory"
-    # Building inside the matching image aligns the link target with the most
-    # likely runtime host.
+    # Build inside the official PHP Docker image so the .so links against the
+    # SOVERSION that ships with that base image:
+    #   php:X.Y-cli/zts        -> Debian trixie, libnode.so.115
+    #   php:X.Y-cli/zts-alpine -> Alpine 3.22ish, libnode.so.137
+    # Building on the bare ubuntu-24.04 runner would link against
+    # libnode.so.109 (Node 18) instead — missing on the more popular php:X.Y
+    # images and causing dynamic-link failures at PHP startup. Building in
+    # the matching image aligns the link target with the most likely host.
+    # The Alpine image is needed separately because Alpine uses musl libc,
+    # which is ABI-incompatible with glibc; PIE encodes this in the asset
+    # name as `glibc` vs `musl` and matches based on the user's libc.
     container:
-      image: php:${{ matrix.php-version }}-${{ matrix.zts-mode == 'ts' && 'zts' || 'cli' }}
+      image: php:${{ matrix.php-version }}-${{ matrix.zts-mode == 'ts' && 'zts' || 'cli' }}${{ matrix.distro == 'alpine' && '-alpine' || '' }}
     strategy:
       fail-fast: false
       matrix:
         # ubuntu-24.04     = x86_64 native runner
         # ubuntu-24.04-arm = arm64 native runner (no QEMU)
-        # The container running on each runner inherits the host arch, so each
-        # cell produces a single-arch binary.
+        # The container on each runner inherits the host arch, so each cell
+        # produces a single-arch binary.
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
         php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
-        # `php:X.Y-cli` is NTS; `php:X.Y-zts` is ZTS. Both are Debian trixie.
+        # `php:X.Y-cli`/`-cli-alpine` are NTS; `-zts`/`-zts-alpine` are ZTS.
         zts-mode: [nts, ts]
+        # debian = Debian trixie (libnode.so.115, glibc)
+        # alpine = Alpine 3.22 (libnode.so.137, musl)
+        distro: [debian, alpine]
     permissions:
       # contents:write is required to upload to the draft release.
       contents: write
@@ -59,13 +64,22 @@ jobs:
       # The slim php:X.Y-* images don't include build tooling or libnode-dev.
       # pie-ext-binary-builder needs jq + zip + a C++ toolchain (it shells out
       # to `phpize / ./configure / make / zip`). libv8/libnode headers come
-      # from libnode-dev; config.m4 searches both libv8.so and libnode.so.
-      - name: Install build tooling and libnode
+      # from libnode-dev (Debian) or nodejs-dev (Alpine); config.m4 searches
+      # both libv8.so and libnode.so, finding libnode at /usr/include/node.
+      - name: Install build tooling and libnode (Debian)
+        if: matrix.distro == 'debian'
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential autoconf libtool pkg-config \
             libnode-dev jq zip ca-certificates curl git
+
+      - name: Install build tooling and nodejs (Alpine)
+        if: matrix.distro == 'alpine'
+        run: |
+          apk add --no-cache \
+            build-base autoconf libtool m4 pkgconfig \
+            nodejs-dev jq zip ca-certificates curl git
 
       - name: Build and release
         uses: php/pie-ext-binary-builder@0.0.2
