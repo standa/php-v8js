@@ -120,7 +120,11 @@ jobs:
             aarch64) ARCH=arm64 ;;
             *)       ARCH=$(uname -m) ;;
           esac
-          if ldd --version 2>&1 | grep -qi musl; then LIBC=musl; else LIBC=glibc; fi
+          # NB: Alpine's musl ldd exits 1 (prints usage) — `set -o pipefail` would
+          # propagate that and the `if` would see false, falling through to glibc.
+          # Capture stdout+stderr with `|| true` first, then grep the string.
+          LDD_OUT=$(ldd --version 2>&1 || true)
+          if printf "%s" "$LDD_OUT" | grep -qi musl; then LIBC=musl; else LIBC=glibc; fi
           ZTS_SUFFIX=$(php -r 'echo PHP_ZTS ? "-zts" : "";')
           DEBUG_SUFFIX=$(php -r 'echo PHP_DEBUG ? "-debug" : "";')
           ASSET="php_${EXT_NAME}-${TAG}_php${PHP_VER}-${ARCH}-linux-${LIBC}${DEBUG_SUFFIX}${ZTS_SUFFIX}.zip"
