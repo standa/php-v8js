@@ -14,45 +14,57 @@ PHP 8.0 is EOL (Nov 2023) and explicitly out of scope. macOS is currently unable
 
 ## Install with PIE
 
-The fast path — assuming `pie` 1.4+ is installed and you're on a published release like `v0.1.0`:
+### Fast path — prebuilt binary (Debian trixie + derivatives)
+
+If you're on a `php:X.Y-cli`/`-fpm`/`-apache` image, Debian trixie, Ubuntu 25.04+, or any host with `libnode-dev` (Node ≥ 20, `libnode.so.115`):
 
 ```bash
-# Debian / Ubuntu (verified end-to-end in php:8.4-cli and php:8.5-cli docker images):
-sudo apt-get install libnode-dev pkg-config
-pie install standa/php-v8js --with-v8js=/usr
+sudo apt-get install -y libnode-dev unzip
+pie install standa/php-v8js
 ```
 
-That single `pie install` does **all** of the following automatically:
+**Do not pass `--with-v8js`** on this path. PIE refuses prebuilt binaries when any configure option is set (it can't know whether the prebuilt was built with the flag you wanted), and falls back to a source build instead. The prebuilt was already linked against `/usr/lib/.../libnode.so` — no `--with-v8js` needed.
 
-1. Resolves `standa/php-v8js` from Packagist (or this repository, once added as a PIE path repo)
+### What `pie install` does (no flags, the prebuilt path)
+
+1. Resolves `standa/php-v8js` from Packagist
 2. Detects your platform tuple — `php<X.Y>-<arch>-<os>-<libc>-<tsmode>` — e.g. `php8.4-arm64-linux-glibc-nts`
-3. Downloads the matching **prebuilt `.so` archive** from the release assets if one exists (asset name: `php_v8js-<ver>_php<X.Y>-<arch>-<os>-<libc>-<tsmode>.zip`). The `composer.json`'s `download-url-method: ["pre-packaged-binary", "composer-default"]` controls this.
-4. **Falls back to a source build** (download git archive → `phpize` → `./configure --with-v8js=...` → `make`) if no matching prebuilt asset is found
-5. Installs the resulting `.so` into the active PHP's extension directory and enables it via an INI file
+3. Matches and downloads the prebuilt `.so` archive from the release assets (asset name: `php_v8js-<ver>_php<X.Y>-<arch>-<os>-<libc>-<tsmode>.zip`)
+4. Extracts and installs the `.so` into the active PHP's extension directory; enables it via an INI file
+
+No `phpize`, no `./configure`, no `make`. ~10 seconds.
 
 ### What prebuilt binaries ship per release
 
-Each tag (`v0.1.0`, `v0.1.1`, …) produces these binaries via `.github/workflows/release.yml`:
+Each tag produces these binaries via `.github/workflows/release.yml`:
 
-| Platform | PHP versions | NTS | TS |
-|---|---|---|---|
-| `linux-glibc-x86_64` | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ |
-| `linux-glibc-arm64`  | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ |
-| `darwin-arm64` (macOS Apple Silicon) | — | ❌ | ❌ (until [v8js#546](https://github.com/phpv8/v8js/issues/546) lands) |
-| Windows | — | ❌ | ❌ (out of scope — would need [php/php-windows-builder](https://github.com/php/php-windows-builder)) |
+| Platform | PHP versions | NTS | TS | libnode SOVERSION |
+|---|---|---|---|---|
+| `linux-glibc-x86_64` (Debian trixie based) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
+| `linux-glibc-arm64`  (Debian trixie based) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
+| `darwin-arm64` (macOS Apple Silicon) | — | ❌ | ❌ (until [v8js#546](https://github.com/phpv8/v8js/issues/546) lands) | — |
+| Windows | — | ❌ | ❌ (out of scope — would need [php/php-windows-builder](https://github.com/php/php-windows-builder)) | — |
 
-20 Linux binaries per release. Users on macOS or any platform without a prebuilt get a source build automatically — no extra commands needed.
+**20 Linux binaries per release**, all built inside the matching `php:X.Y-cli`/`-zts` container (Debian trixie) so the `.so` links against `libnode.so.115`. Users on hosts with a different SOVERSION (Ubuntu 22.04/24.04 = `.109`, Alpine = different again) won't be able to dynamically load these binaries — see the *source-build escape hatch* below.
 
-### Other install paths
+### Source-build escape hatch (any libv8/libnode version)
+
+If you're on a host without `libnode.so.115` (Ubuntu 22.04/24.04, Alpine, custom V8 build) — or PIE installs a prebuilt that fails to load at startup with `cannot open shared object file` — pass `--with-v8js=PATH` to force a source build against your local V8/Node headers:
 
 ```bash
-# macOS (Homebrew) — see warning below; build will fail until v8js supports V8 14.x:
+# Debian/Ubuntu (any version where libnode-dev is available):
+sudo apt-get install -y libnode-dev pkg-config build-essential autoconf libtool
+pie install standa/php-v8js --with-v8js=/usr
+
+# macOS (Homebrew — see warning below; build will fail until v8js supports V8 14.x):
 brew install v8
 pie install standa/php-v8js --with-v8js=$(brew --prefix v8)
 
 # Custom V8 build (when you've built V8 from source):
 pie install standa/php-v8js --with-v8js=/opt/v8
 ```
+
+The `--with-v8js=PATH` flag disables the prebuilt-binary download (PIE skips prebuilts when configure options are passed), then PIE downloads the source archive and runs `phpize → ./configure → make` against your local V8/Node headers. Slower (~30–60s) but works on any libv8/libnode SOVERSION.
 
 > **⚠️ macOS users:** Homebrew's `v8` formula is currently 14.x, which the
 > upstream `php8` branch cannot build against yet (tracked at

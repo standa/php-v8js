@@ -25,31 +25,64 @@ jobs:
           gh release view "${{ github.ref_name }}" >/dev/null 2>&1 \
             || gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --draft --generate-notes
 
-  add-pie-binaries:
+  add-pie-binaries-linux:
     needs: [create-draft-release]
-    runs-on: ${{ matrix.operating-system }}
+    runs-on: ${{ matrix.runner }}
+    # Build inside the official PHP Docker image (Debian trixie base) so the
+    # produced .so links against libnode.so.115 — the SOVERSION that ships
+    # with php:X.Y-cli/fpm/apache, Debian trixie, and Ubuntu noble+ derivatives.
+    # If we built on the ubuntu-24.04 runner directly the .so would link against
+    # libnode.so.109 (Node 18 from Ubuntu 24.04), which is missing on the more
+    # popular php:X.Y-cli userspace and fails at php startup with:
+    #   "libnode.so.109: cannot open shared object file: No such file or directory"
+    # Building inside the matching image aligns the link target with the most
+    # likely runtime host.
+    container:
+      image: php:${{ matrix.php-version }}-${{ matrix.zts-mode == 'ts' && 'zts' || 'cli' }}
     strategy:
-      # Don't cancel other cells if one fails; we want to see the full matrix.
       fail-fast: false
       matrix:
-        # ubuntu-24.04      = native x86_64 Linux runner
-        # ubuntu-24.04-arm  = native arm64 Linux runner (no QEMU; matches AWS
-        #                     Graviton, Apple Silicon Docker, Raspberry Pi, etc.)
-        # macos-14          = native arm64 macOS runner (Apple Silicon)
-        operating-system: [ubuntu-24.04, ubuntu-24.04-arm, macos-14]
-        # 8.5 is the current PHP stable release as of June 2026; verified
-        # locally in a php:8.5-cli docker container (Debian trixie + libnode-dev).
-        # Upstream v8js's own CI doesn't yet cover 8.5, so this is the
-        # first place 8.5 gets continuous coverage.
-        php-versions: ['8.1', '8.2', '8.3', '8.4', '8.5']
+        # ubuntu-24.04     = x86_64 native runner
+        # ubuntu-24.04-arm = arm64 native runner (no QEMU)
+        # The container running on each runner inherits the host arch, so each
+        # cell produces a single-arch binary.
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
+        # `php:X.Y-cli` is NTS; `php:X.Y-zts` is ZTS. Both are Debian trixie.
         zts-mode: [nts, ts]
-        exclude:
-          # Homebrew PHP is NTS only; setup-php cannot install a ZTS PHP on macOS.
-          # This exclude is macOS-specific; both Ubuntu runners build TS and NTS.
-          - operating-system: macos-14
-            zts-mode: ts
     permissions:
       # contents:write is required to upload to the draft release.
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      # The slim php:X.Y-* images don't include build tooling or libnode-dev.
+      # pie-ext-binary-builder needs jq + zip + a C++ toolchain (it shells out
+      # to `phpize / ./configure / make / zip`). libv8/libnode headers come
+      # from libnode-dev; config.m4 searches both libv8.so and libnode.so.
+      - name: Install build tooling and libnode
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential autoconf libtool pkg-config \
+            libnode-dev jq zip ca-certificates curl git
+
+      - name: Build and release
+        uses: php/pie-ext-binary-builder@0.0.2
+        with:
+          release-tag: ${{ github.ref_name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          configure-flags: "--with-v8js=/usr"
+
+  add-pie-binaries-macos:
+    needs: [create-draft-release]
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5']
+        # macOS jobs are NTS only — Homebrew PHP doesn't ship ZTS.
+    permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
@@ -57,36 +90,23 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ matrix.php-versions }}
+          php-version: ${{ matrix.php-version }}
         env:
-          phpts: ${{ matrix.zts-mode }}
-
-      - name: Install libv8 (Linux)
-        if: runner.os == 'Linux'
-        # NOTE: Ubuntu 24.04 (and current Debian) no longer ship `libv8-dev`.
-        # `libnode-dev` provides Node's bundled V8 + headers at /usr/include/node,
-        # which upstream's config.m4 finds when --with-v8js=/usr (it searches for
-        # libnode.so as well as libv8.so). This is the same approach upstream
-        # v8js's own CI uses for its non-Alpine Linux job.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libnode-dev pkg-config
-          echo "V8_PREFIX=/usr" >> "$GITHUB_ENV"
+          phpts: nts
 
       - name: Install libv8 (macOS)
-        if: runner.os == 'macOS'
         # NOTE: Homebrew's current `v8` formula is 14.x, which phpv8/v8js (php8
         # branch) cannot build against yet (V8 14.6 removed Local::Holder(),
         # changed SetAlignedPointerInInternalField, and replaced String::Write
         # with WriteV2). Tracked: https://github.com/phpv8/v8js/issues/546.
-        # Until that's resolved, the macOS matrix cells will fail at `make` and
-        # this workflow won't publish macOS binaries. Linux cells are unaffected.
+        # Until that's resolved, macOS cells will fail at `make` and this
+        # workflow won't publish macOS binaries. Linux cells are unaffected.
         run: |
           brew install v8
           echo "V8_PREFIX=$(brew --prefix v8)" >> "$GITHUB_ENV"
 
       - name: Build and release
-        continue-on-error: ${{ runner.os == 'macOS' }}
+        continue-on-error: true
         uses: php/pie-ext-binary-builder@0.0.2
         with:
           release-tag: ${{ github.ref_name }}
