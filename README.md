@@ -48,11 +48,11 @@ Each tag produces these binaries via `.github/workflows/release.yml`:
 | `linux-glibc-x86_64` (Debian trixie / `php:X.Y-cli`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
 | `linux-glibc-arm64`  (Debian trixie / `php:X.Y-cli`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.115` |
 | `linux-musl-x86_64`  (Alpine / `php:X.Y-cli-alpine`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.137` |
-| `linux-musl-arm64`   (Alpine / `php:X.Y-cli-alpine`) | 8.1, 8.2, 8.3, 8.4, 8.5 | ✅ | ✅ | `libnode.so.137` |
+| `linux-musl-arm64`   (Alpine arm64) | — | ❌ | ❌ (GitHub Actions doesn't currently run JS actions inside arm64+musl containers — node20 runtime injection fails. Source build via `--with-v8js=/usr` is the fallback.) | — |
 | `darwin-arm64` (macOS Apple Silicon) | — | ❌ | ❌ (until [v8js#546](https://github.com/phpv8/v8js/issues/546) lands) | — |
 | Windows | — | ❌ | ❌ (out of scope — would need [php/php-windows-builder](https://github.com/php/php-windows-builder)) | — |
 
-**40 Linux binaries per release**, each built inside the matching `php:X.Y-{cli,zts}{,-alpine}` container so the `.so` links against the libnode SOVERSION that actually ships with that base image. Users on hosts with a different SOVERSION (Ubuntu 22.04/24.04 = `.109`, custom Node build) won't be able to dynamically load these binaries — see the *source-build escape hatch* below.
+**30 Linux binaries per release**, each built inside the matching `php:X.Y-{cli,zts}{,-alpine}` container so the `.so` links against the libnode SOVERSION that actually ships with that base image. Users on hosts with a different SOVERSION (Ubuntu 22.04/24.04 = `.109`, custom Node build) won't be able to dynamically load these binaries — see the *source-build escape hatch* below.
 
 ### Source-build escape hatch (any libv8/libnode version)
 
